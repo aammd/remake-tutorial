@@ -1,3 +1,8 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
 ### Tutorial for remake
 
 This is a use case and tutorial for the R package **remake**
@@ -47,6 +52,75 @@ sent us the data from 1982 to 2007. So, we have two files:
 
 **gapminder1982-2007.csv** - Gapminder data from 1982 to 2007
 
+### A familiar beginning -- R functions + Master file.
+
+We're going to begin with a more traditional style of R project management -- R functions, accompanied by a single R script which runs them. 
+
+In our analysis, we first want to summarize our data, then plot it in two different ways. We'll keep our handy functions in a single file, called `R/function.R`
+
+First, a function for summarizing gapminder data:
+
+```r
+mean_lifeExp_by_continent <- function(gpmndr) {
+    gpmndr %>%
+        group_by(year, continent) %>%
+        summarize(
+            mean_lifeExp = mean(lifeExp)
+        )
+}
+```
+
+Let's run this function on `gapminder` data and see what we get.
+
+Once summarized, we want to create some plots. We can write functions for this too:
+
+```r
+plot_mean_lifeExp <- function(gpmndr_continent) {
+    ggplot(gpmndr_continent, aes(x = year, y = mean_lifeExp, group = continent, colour = continent)) +
+        geom_line() +
+        xlab("Year") + ylab("Mean life expectancy") + 
+        ggtitle(paste(min(gpmndr_continent$year), max(gpmndr_continent$year), sep = ' - '))
+}
+
+```
+
+And again, filtering for particular countries:
+
+```r
+plot_by_country <- function(gpmndr, countries = c("South Africa", "Morocco", "Algeria", "Nigeria")) {
+
+    not_found <- countries[! countries %in% unique(gpmndr[["country"]])]
+    if(length(not_found) > 0) {
+        stop(paste(not_found, collapse = ", "),
+             " not found in the gapminder data.")
+    }
+
+    gpmndr %>%
+        filter(country %in%  countries) %>%
+        ggplot(aes(x = year, y = lifeExp, colour = country, group = country)) +
+        geom_line() +
+        facet_wrap(~ country) +
+        xlab("Year") + ylab("Life expectancy") + 
+        ggtitle(paste(min(gpmndr$year), max(gpmndr$year), sep = ' - '))
+}
+```
+
+To use these functions, we use the base R function `source()` to read them into R, like so:
+
+```r
+library(dplyr)
+library(ggplot2)
+
+source("R/function.R")
+
+gap_data <- read.csv("gapminder1952-1977.csv")
+
+mean_lifeExp_by_continent_data <- mean_lifeExp_by_continent(gap_data)
+
+
+```
+
+
 ### Remake components 
 
 In order to create your workflow you need to describe the beginning, intermediate and end points of your analysis, and how they flow together. These steps are called the targets, rules and dependencies on `remake`.
@@ -78,7 +152,7 @@ The yaml file tells remake everything that needs to know.
 
 At the beginning of your YAML file you need to write the packages and you need to source the functions for your rules.
 
-```{yaml}
+```yaml
 packages:
   - dplyr
   - ggplot2
@@ -94,7 +168,7 @@ The `all` target is the final output. In this case we are creating an hmtl repor
 
 In order to create this report, we need first to import the data. In this case the target is gapminder and the rule is `read.csv`. 
 
-```{yaml}
+```yaml
 packages:
   - dplyr
   - ggplot2
@@ -115,7 +189,7 @@ targets:
 The next targets we need is our transformed data frame and the plots. The rules for the plots are the plotting functions we defined in the function file.
 
 
-```{yaml}
+```yaml
 packages:
   - dplyr
   - ggplot2
@@ -144,7 +218,7 @@ targets:
 
 Finally we want to create the output which is the html report.   
 
-```{yaml}
+```yaml
 packages:
   - dplyr
   - ggplot2
@@ -223,7 +297,7 @@ One of the best things about remake is re-running your whole pipeline on a new d
 
 Try running this on gapminder dataset from 1982 - 2007. 
 
-```{yaml}
+```yaml
 gapminder:
     command: read.csv(file = "gapminder1982-2007.csv")
 ```
@@ -244,7 +318,7 @@ was generated with another R script
 
 Dependencies are an important component of remake. Dependencies ensure that a target gets remade every time any of the dependencies changes. With `remake` there are implicit and explicit dependencies. Implicit dependencies are objects that are called within a function. E.g.,
 
-```{yaml}
+```yaml
 
   gapminder:
     command: read.csv(file = "data/gapminder.csv")
@@ -258,7 +332,7 @@ Dependencies are an important component of remake. Dependencies ensure that a ta
 
 You can also have explicit dependencies. When the creation of an object/output is dependent on one or more objects that are never referenced in a function, you must explicitly state these dependencies. E.g., 
 
-```{yaml}
+```yaml
 
   report.html:
     depends:
@@ -275,7 +349,7 @@ You can also have explicit dependencies. When the creation of an object/output i
 
 Not every argument that you pass to a function needs to be a dependency. For example, when we specify what countries we want to plot, we do not want remake to look for variables called `South Africa`, `Morocco`, `Algeria`, and `Nigeria` because these are columns in the dataset gapminder. To tell remake that certain arguments are not considered as dependencies use the function I(). 
 
-```{yaml}
+```yaml
 
   figures/plot_by_country.png:
     command: plot_by_country(gapminder, I(countries = c("South Africa", "Morocco", "Algeria", "Nigeria")))
